@@ -1,0 +1,29 @@
+<html>
+<body>
+    <pre id="output"></pre>
+    <button type="submit" onclick="submit()">TEST</button>
+    <script>
+
+        var output = document.getElementById("output");
+        var socket = new WebSocket("ws://localhost:8080/socket");
+
+        socket.onopen = function () {
+            output.innerHTML += "Sending ping to socket\n";
+            socket.send("ping");
+        };
+        
+        
+
+        socket.onmessage = function (e) {
+            output.innerHTML += e.data+"\n";
+        };
+
+
+
+        function submit(){
+            socket.send("test socket button");
+        }
+        
+    </script>
+</body>
+</html>
