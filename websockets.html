@@ -1,29 +1,38 @@
 <html>
 <body>
     <pre id="output"></pre>
-    <button type="submit" onclick="submit()">TEST</button>
-    <script>
 
+    <button onclick="playpause()">Play/Pause</button>
+
+    <script>
+        var state = false;  // paused state is false and play state is true
         var output = document.getElementById("output");
-        var socket = new WebSocket("ws://localhost:8080/socket");
+        var socket = new WebSocket("ws://x.eventshub.tech:8080/socket");
+
+        var audioContext = new (window.AudioContext || window.webkitAudioContext)(); // Audio context for decoding
+        var audioBuffer;  // Variable to store decoded audio data
+        var sourceNode;   // Variable for the audio source node
 
         socket.onopen = function () {
-            output.innerHTML += "Sending ping to socket\n";
-            socket.send("ping");
+            output.innerHTML += "Connection established\n";
         };
-        
-        
 
         socket.onmessage = function (e) {
-            output.innerHTML += e.data+"\n";
+            output.innerHTML += e.data;
+            
         };
 
 
-
-        function submit(){
-            socket.send("test socket button");
+        function playpause() {
+            if (state) {
+                socket.send("pause");
+                state = false;
+            } else {
+                socket.send("play");
+                state = true;
+            }
         }
-        
+
     </script>
 </body>
 </html>
