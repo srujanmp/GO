@@ -1,27 +1,36 @@
-<html>
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>WebSocket Audio</title>
+</head>
 <body>
     <pre id="output"></pre>
-
-    <button onclick="playpause()">Play/Pause</button>
+    <button id="button" onclick="playpause()">Play/Pause</button>
+    <button id="save" onclick="saveToFile()">Save Audio</button>
 
     <script>
-        var state = false;  // paused state is false and play state is true
+        var state = false; // paused state is false, play state is true
         var output = document.getElementById("output");
+        var button = document.getElementById("button");
         var socket = new WebSocket("ws://x.eventshub.tech:8080/socket");
-
-        var audioContext = new (window.AudioContext || window.webkitAudioContext)(); // Audio context for decoding
-        var audioBuffer;  // Variable to store decoded audio data
-        var sourceNode;   // Variable for the audio source node
+        var audioChunks = []; // Array to hold binary data
 
         socket.onopen = function () {
             output.innerHTML += "Connection established\n";
         };
 
         socket.onmessage = function (e) {
-            output.innerHTML += e.data;
-            
+            if (e.data === "eof") {
+                socket.send("pause");
+                state = false;
+            } else {
+                // Append received binary data to the array
+                audioChunks.push(e.data);
+                output.innerHTML += "msg ";
+            }
         };
-
 
         function playpause() {
             if (state) {
@@ -33,6 +42,26 @@
             }
         }
 
+        function saveToFile() {
+            if (audioChunks.length === 0) {
+                alert("No audio data received yet!");
+                return;
+            }
+
+            // Create a Blob from the received chunks
+            const audioBlob = new Blob(audioChunks, { type: "audio/wav" });
+
+            // Generate a download link
+            const downloadLink = document.createElement("a");
+            downloadLink.href = URL.createObjectURL(audioBlob);
+            downloadLink.download = "received_audio.wav";
+            downloadLink.textContent = "Download Audio";
+
+            // Append the link to the document and simulate a click
+            document.body.appendChild(downloadLink);
+            downloadLink.click();
+            document.body.removeChild(downloadLink);
+        }
     </script>
 </body>
 </html>
