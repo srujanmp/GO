@@ -16,8 +16,8 @@ var upgrader = websocket.Upgrader{
 }
 
 func main() {
-	ticker := time.NewTicker(1 * time.Millisecond)
-	defer ticker.Stop() // Stop ticker when the server shuts down
+	ticker := time.NewTicker(1 * time.Millisecond) //20ms
+	defer ticker.Stop()                            // Stop ticker when the server shuts down
 
 	http.HandleFunc("/socket", func(w http.ResponseWriter, r *http.Request) {
 		conn, err := upgrader.Upgrade(w, r, nil)
@@ -64,7 +64,7 @@ func main() {
 
 			n, err := audioFile.Read(buffer)
 			if err == io.EOF {
-				// 	// Reached end of file, loop back to start or end the audio
+				// Reached end of file
 				fmt.Println("End of audio file reached.")
 				audioFile.Seek(0, 0) // Go back to the start of the file
 				conn.WriteMessage(websocket.TextMessage, []byte("eof"))
