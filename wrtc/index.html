@@ -1,0 +1,116 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>WebRTC</title>
+</head>
+<body>
+    <button id="playPauseButton">Play</button>
+
+    <script>
+
+        let isPlaying = false;
+        let conn = null;
+        let ws = new WebSocket('ws://localhost:8080/websocket');
+        let audioElement = null;
+        let audioStream = null;
+        let audioContext = null;
+
+        const playPauseButton = document.getElementById('playPauseButton');
+
+
+        // Initialize AudioContext
+
+        audioContext = new (window.AudioContext || window.webkitAudioContext)({
+            sampleRate: 8000
+        });
+
+
+        //setup webrtc using ws
+        ws.onopen = () => {
+            console.log("connected");
+            setupWebRTC();
+        };
+
+        //setup webrtc
+        async function setupWebRTC() {
+            
+            const configuration = {
+                iceServers: [
+                    { urls: 'stun:stun.l.google.com:19302' }
+                ]
+            };
+
+            conn = new RTCPeerConnection(configuration);
+
+            conn.ontrack = (event) => {
+
+                console.log('audio track received:', event.track);
+
+                audioStream = event.streams[0];
+                if (isPlaying && !audioElement) {
+                    audioElement = new Audio();
+                    audioElement.srcObject = audioStream;
+                    audioElement.play().then(() => {console.log('Audio playing');})  
+                }
+            };
+
+            conn.addTransceiver('audio', {
+                direction: 'recvonly',
+                sendEncodings: [{ maxBitrate: 64000 }]
+            });
+
+            const offer = await conn.createOffer();
+            await conn.setLocalDescription(offer);
+            
+            console.log('Sending offer to server');
+
+            ws.send(JSON.stringify({
+                type: 'offer',
+                sdp: conn.localDescription
+            }));
+        }
+
+
+        //play pause logic
+        playPauseButton.addEventListener('click', async () => {
+            if (audioContext.state === 'suspended') {
+                await audioContext.resume();
+            }
+
+            isPlaying = !isPlaying;
+
+            if (isPlaying) {
+                playPauseButton.textContent = 'Pause';
+                ws.send('PLAY');
+
+                if (audioStream && !audioElement) {
+ 
+                        audioElement = new Audio();
+                        audioElement.srcObject = audioStream;
+                        await audioElement.play();
+                        console.log('Audio playing');
+                    
+                }
+            } else {
+                playPauseButton.textContent = 'Play';
+                ws.send('PAUSE');
+
+                if (audioElement) {
+                    audioElement.pause();
+                    console.log('Audio paused');
+                }
+            }
+        });
+
+       
+
+        ws.onmessage = async (event) => {
+            const message = JSON.parse(event.data);
+            if (message.type === 'answer') {
+                await conn.setRemoteDescription(message.sdp);
+                console.log('Received and set remote description');
+            }
+        };
+    </script>
+</body>
+</html>
