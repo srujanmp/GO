@@ -56,10 +56,10 @@ func handleWebSocket(w http.ResponseWriter, r *http.Request) {
 	}
 
 	defer func() {
-        if audioServer.audioFile != nil {
-            audioServer.audioFile.Close()
-        }
-    }()
+		if audioServer.audioFile != nil {
+			audioServer.audioFile.Close()
+		}
+	}()
 
 	// Set media engine with proper codecs
 	mediaEngine := webrtc.MediaEngine{}
@@ -204,7 +204,7 @@ func handleWebSocket(w http.ResponseWriter, r *http.Request) {
 				// 	audioServer.audioFile.Close()
 				// 	audioServer.audioFile = nil
 				// }
-				audioServer.mutex.Unlock() 
+				audioServer.mutex.Unlock()
 				log.Println("Audio streaming paused")
 			}
 			continue
@@ -233,7 +233,10 @@ func handleWebSocket(w http.ResponseWriter, r *http.Request) {
 				log.Printf("Error setting local description: %v", err)
 				continue
 			}
-
+			log.Println("OFFER:")
+			log.Println(message.SDP)
+			log.Println("ANSWER:")
+			log.Println(answer)
 			log.Println("Sending answer to client...")
 			// Send answer back to client
 			response := WebSocketMessage{

@@ -3,8 +3,10 @@
 <head>
     <title>WebRTC</title>
     <style>
-        #playPauseButton {
-            display: none;
+      
+        #status {
+            color: #666;
+            margin: 10px;
         }
     </style>
 </head>
@@ -15,13 +17,145 @@
     <script>
         let isPlaying = false;
         let conn = null;
-        let ws = new WebSocket('ws://x.eventshub.tech:8080/websocket');
+        let ws = null;
         let audioElement = null;
         let audioStream = null;
         let audioContext = null;
+        let connectionAttempts = 0;
+        const MAX_RECONNECT_ATTEMPTS = 3;
 
         const playPauseButton = document.getElementById('playPauseButton');
         const statusElement = document.getElementById('status');
+        connectWebSocket();
+        function connectWebSocket() {
+            ws = new WebSocket('ws://x.eventshub.tech:8080/websocket');
+            
+            ws.onopen = () => {
+                console.log("WebSocket connected");
+                statusElement.textContent = "Establishing connection...";
+                setupWebRTC();
+                connectionAttempts = 0;
+            };
+
+            ws.onclose = () => {
+                console.log("WebSocket closed");
+                handleConnectionFailure();
+            };
+
+            ws.onerror = () => {
+                console.log("WebSocket error");
+                handleConnectionFailure();
+            };
+
+            ws.onmessage = async (event) => {
+                const message = JSON.parse(event.data);
+                if (message.type === 'answer') {
+                    try {
+                        await conn.setRemoteDescription(message.sdp);
+                        console.log('Received and set remote description');
+                    } catch (error) {
+                        console.error('Error setting remote description:', error);
+                        handleConnectionFailure();
+                    }
+                }
+            };
+        }
+
+        function handleConnectionFailure() {
+            if (connectionAttempts < MAX_RECONNECT_ATTEMPTS) {
+                connectionAttempts++;
+                statusElement.textContent = `Connection attempt ${connectionAttempts}/${MAX_RECONNECT_ATTEMPTS}...`;
+                
+                // Cleanup existing connections
+                cleanup();
+                
+                // Try reconnecting after a delay
+                setTimeout(() => {
+                    connectWebSocket();
+                }, 2000);
+            } else {
+                statusElement.textContent = "Connection failed. Please refresh the page.";
+                playPauseButton.style.display = 'none';
+            }
+        }
+
+        function cleanup() {
+            if (audioElement) {
+                audioElement.pause();
+                audioElement.srcObject = null;
+                audioElement = null;
+            }
+            if (conn) {
+                conn.close();
+                conn = null;
+            }
+            if (ws) {
+                ws.close();
+                ws = null;
+            }
+            audioStream = null;
+        }
+
+        async function setupWebRTC() {
+            try {
+                const configuration = {
+                    iceServers: [
+                        { urls: 'stun:stun.l.google.com:19302' },
+
+    { urls: "stun:stun.l.google.com:5349" },
+    { urls: "stun:stun1.l.google.com:3478" },
+    { urls: "stun:stun1.l.google.com:5349" }
+                    ]
+                };
+
+                conn = new RTCPeerConnection(configuration);
+
+                // Monitor connection state
+                conn.oniceconnectionstatechange = () => {
+                    console.log("ICE Connection State:", conn.iceConnectionState);
+                    if (conn.iceConnectionState === 'failed' || 
+                        conn.iceConnectionState === 'disconnected') {
+                        handleConnectionFailure();
+                    }
+                };
+
+                conn.ontrack = (event) => {
+                    console.log('Audio track received:', event.track);
+                    audioStream = event.streams[0];
+                    
+                    // Verify the audio track is valid
+                    if (event.track.enabled && event.track.readyState === 'live') {
+                        statusElement.style.display = 'none';
+                        playPauseButton.style.display = 'block';
+                        
+                        if (isPlaying && !audioElement) {
+                            createAndPlayAudio();
+                        }
+                    } else {
+                        handleConnectionFailure();
+                    }
+                };
+
+                conn.addTransceiver('audio', {
+                    direction: 'recvonly',
+                    sendEncodings: [{ maxBitrate: 64000 }]
+                });
+
+                const offer = await conn.createOffer();
+                await conn.setLocalDescription(offer);
+                
+                console.log('Sending offer to server');
+                statusElement.textContent = "Preparing audio stream...";
+
+                ws.send(JSON.stringify({
+                    type: 'offer',
+                    sdp: conn.localDescription
+                }));
+            } catch (error) {
+                console.error('WebRTC setup error:', error);
+                handleConnectionFailure();
+            }
+        }
 
         // Initialize AudioContext on user interaction
         async function initAudioContext() {
@@ -35,57 +169,7 @@
                 }
             }
         }
-
-        //setup webrtc using ws
-        ws.onopen = () => {
-            console.log("connected");
-            statusElement.textContent = "Establishing connection...";
-            setupWebRTC();
-        };
-
-        ws.onerror = () => {
-            statusElement.textContent = "Connection failed. Please try again later.";
-        };
-
-        //setup webrtc
-        async function setupWebRTC() {
-            const configuration = {
-                iceServers: [
-                    { urls: 'stun:stun.l.google.com:19302' }
-                ]
-            };
-
-            conn = new RTCPeerConnection(configuration);
-
-            conn.ontrack = (event) => {
-                console.log('audio track received:', event.track);
-                audioStream = event.streams[0];
-                // Show button when audio track is received
-                statusElement.style.display = 'none';
-                playPauseButton.style.display = 'block';
-                
-                if (isPlaying && !audioElement) {
-                    createAndPlayAudio();
-                }
-            };
-
-            conn.addTransceiver('audio', {
-                direction: 'recvonly',
-                sendEncodings: [{ maxBitrate: 64000 }]
-            });
-
-            const offer = await conn.createOffer();
-            await conn.setLocalDescription(offer);
-            
-            console.log('Sending offer to server');
-            statusElement.textContent = "Preparing audio stream...";
-
-            ws.send(JSON.stringify({
-                type: 'offer',
-                sdp: conn.localDescription
-            }));
-        }
-
+        
         // Separate function to create and play audio
         async function createAndPlayAudio() {
             try {
@@ -134,14 +218,6 @@
                 playPauseButton.textContent = 'Play';
             }
         });
-
-        ws.onmessage = async (event) => {
-            const message = JSON.parse(event.data);
-            if (message.type === 'answer') {
-                await conn.setRemoteDescription(message.sdp);
-                console.log('Received and set remote description');
-            }
-        };
     </script>
 </body>
 </html>
