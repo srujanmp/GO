@@ -56,10 +56,10 @@ func handleWebSocket(w http.ResponseWriter, r *http.Request) {
 	}
 
 	defer func() {
-        if audioServer.audioFile != nil {
-            audioServer.audioFile.Close()
-        }
-    }()
+		if audioServer.audioFile != nil {
+			audioServer.audioFile.Close()
+		}
+	}()
 
 	// Set media engine with proper codecs
 	mediaEngine := webrtc.MediaEngine{}
@@ -204,7 +204,7 @@ func handleWebSocket(w http.ResponseWriter, r *http.Request) {
 				// 	audioServer.audioFile.Close()
 				// 	audioServer.audioFile = nil
 				// }
-				audioServer.mutex.Unlock() 
+				audioServer.mutex.Unlock()
 				log.Println("Audio streaming paused")
 			}
 			continue
@@ -234,18 +234,20 @@ func handleWebSocket(w http.ResponseWriter, r *http.Request) {
 				continue
 			}
 
-			log.Println("Sending answer to client...")
-			// Send answer back to client
-			response := WebSocketMessage{
-				Type: "answer",
-				SDP:  *peerConnection.LocalDescription(),
-			}
+			peerConnection.OnICEGatheringStateChange(func(iceGatheringState webrtc.ICEGathererState) {
+				log.Printf("ICE Gathering State has changed %s \n", iceGatheringState)
+				log.Println("Sending answer to client...")
+				// Send answer back to client
+				response := WebSocketMessage{
+					Type: "answer",
+					SDP:  *peerConnection.LocalDescription(),
+				}
 
-			err = c.WriteJSON(response)
-			if err != nil {
-				log.Printf("Error sending answer: %v", err)
-				continue
-			}
+				err = c.WriteJSON(response)
+				if err != nil {
+					log.Printf("Error sending answer: %v", err)
+				}
+			})
 		}
 	}
 }
