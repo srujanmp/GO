@@ -13,16 +13,14 @@
 <body>
     <button id="playPauseButton">Play</button>
     <div id="status">Connecting...</div>
+    <audio id="audioPlayer" autoplay ></audio>
 
     <script>
         let isPlaying = false;
         let conn = null;
-        let ws = null;
-        let audioElement = null;
+        let ws = new WebSocket('ws://localhost:8080/websocket');
+        let audioElement = document.getElementById('audioPlayer');
         let audioStream = null;
-        let audioContext = null;
-        let connectionAttempts = 0;
-        const MAX_RECONNECT_ATTEMPTS = 3;
 
         const playPauseButton = document.getElementById('playPauseButton');
         const statusElement = document.getElementById('status');
@@ -157,60 +155,70 @@
             }
         }
 
-        // Initialize AudioContext on user interaction
-        async function initAudioContext() {
-            if (!audioContext) {
-                audioContext = new (window.AudioContext || window.webkitAudioContext)({
-                    sampleRate: 8000
-                });
-                // Resume audio context after creation
-                if (audioContext.state === 'suspended') {
-                    await audioContext.resume();
-                }
-            }
-        }
-        
-        // Separate function to create and play audio
-        async function createAndPlayAudio() {
-            try {
-                audioElement = new Audio();
+        //setup webrtc using ws
+        ws.onopen = () => {
+            console.log("connected");
+            statusElement.textContent = "Establishing connection...";
+            setupWebRTC();
+        };
+
+        ws.onerror = () => {
+            statusElement.textContent = "Connection failed. Please try again later.";
+        };
+
+        //setup webrtc
+        async function setupWebRTC() {
+            const configuration = {
+                iceServers: [
+                    { urls: 'stun:stun.l.google.com:19302' }
+                ]
+            };
+
+            conn = new RTCPeerConnection(configuration);
+
+            conn.ontrack = (event) => {
+                console.log('audio track received:', event.track);
+                audioStream = event.streams[0];
                 audioElement.srcObject = audioStream;
-                // Add event listener for play error
-                audioElement.addEventListener('error', (e) => {
-                    console.error('Audio playback error:', e);
-                });
-                await audioElement.play();
-                console.log('Audio playing');
-            } catch (error) {
-                console.error('Error playing audio:', error);
-            }
+                // Show button when audio track is received
+                statusElement.style.display = 'none';
+                playPauseButton.style.display = 'block';
+            };
+
+            conn.addEventListener("icegatheringstatechange", (event) => {
+                console.log('ICE gathering state change:', conn.iceGatheringState);
+                if (conn.iceGatheringState === 'complete') {
+                  console.log('ICE gathering  complete. Sending offer to server');
+                  statusElement.textContent = "Preparing audio stream...";
+                  ws.send(JSON.stringify({
+                      type: 'offer',
+                      sdp: conn.localDescription
+                  }));
+                }
+            });
+
+            conn.addTransceiver('audio', {
+                direction: 'recvonly',
+                sendEncodings: [{ maxBitrate: 64000 }]
+            });
+
+            const offer = await conn.createOffer();
+            await conn.setLocalDescription(offer);
         }
 
         //play pause logic
         playPauseButton.addEventListener('click', async () => {
             try {
-                // Initialize audio context on first click
-                await initAudioContext();
-
                 isPlaying = !isPlaying;
 
                 if (isPlaying) {
                     playPauseButton.textContent = 'Pause';
                     ws.send('PLAY');
-
-                    if (audioStream && !audioElement) {
-                        await createAndPlayAudio();
-                    } else if (audioElement) {
-                        await audioElement.play();
-                    }
+                    audioElement.play();
                 } else {
                     playPauseButton.textContent = 'Play';
                     ws.send('PAUSE');
-
-                    if (audioElement) {
-                        audioElement.pause();
-                        console.log('Audio paused');
-                    }
+                    audioElement.pause();
                 }
             } catch (error) {
                 console.error('Error handling play/pause:', error);

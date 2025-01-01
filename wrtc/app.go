@@ -233,6 +233,7 @@ func handleWebSocket(w http.ResponseWriter, r *http.Request) {
 				log.Printf("Error setting local description: %v", err)
 				continue
 			}
+<<<<<<< HEAD
 			log.Println("OFFER:")
 			log.Println(message.SDP)
 			log.Println("ANSWER:")
@@ -243,12 +244,23 @@ func handleWebSocket(w http.ResponseWriter, r *http.Request) {
 				Type: "answer",
 				SDP:  *peerConnection.LocalDescription(),
 			}
+=======
 
-			err = c.WriteJSON(response)
-			if err != nil {
-				log.Printf("Error sending answer: %v", err)
-				continue
-			}
+			peerConnection.OnICEGatheringStateChange(func(iceGatheringState webrtc.ICEGathererState) {
+				log.Printf("ICE Gathering State has changed %s \n", iceGatheringState)
+				log.Println("Sending answer to client...")
+				// Send answer back to client
+				response := WebSocketMessage{
+					Type: "answer",
+					SDP:  *peerConnection.LocalDescription(),
+				}
+>>>>>>> 7bf26e8d21502c71747a776525f4cb3950382671
+
+				err = c.WriteJSON(response)
+				if err != nil {
+					log.Printf("Error sending answer: %v", err)
+				}
+			})
 		}
 	}
 }
